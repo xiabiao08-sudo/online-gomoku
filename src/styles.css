@@ -40,6 +40,9 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+button:disabled:not(.point) {
   opacity: 0.56;
 }
 
