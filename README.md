@@ -2,6 +2,8 @@
 
 网页好友房五子棋 MVP。用户不登录，输入昵称后创建或加入房间，双方通过 Socket.IO 实时对弈。
 
+**在线试玩：** [https://online-gomoku-wjzw.onrender.com](https://online-gomoku-wjzw.onrender.com)
+
 ## 当前功能
 
 - 19 x 19 自由五子棋，黑白双方五连即胜，不做禁手。
