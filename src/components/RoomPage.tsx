@@ -4,6 +4,7 @@ import { SavedSession, clearSession, loadSession, saveSession } from "../client/
 import { PublicRoomState } from "../shared/game";
 import { Board } from "./Board";
 import { ChatPanel } from "./ChatPanel";
+import { GameControls } from "./GameControls";
 import { requireColor, requireToken } from "./HomePage";
 import { PlayerPanel } from "./PlayerPanel";
 import { StatusMessage } from "./StatusMessage";
@@ -127,14 +128,52 @@ export function RoomPage({ roomId, onExit }: Props) {
     }
   }
 
-  async function restartReady() {
+  async function requestUndo() {
     if (!session || session.roomId !== roomId) {
+      setError("当前浏览器没有这个房间的玩家身份。");
       return;
     }
-    await ackOrThrow<PublicRoomState>("game:restartReady", {
-      roomId,
-      playerToken: session.playerToken
-    });
+    try {
+      await ackOrThrow<PublicRoomState>("game:undoRequest", {
+        roomId,
+        playerToken: session.playerToken
+      });
+      setError("");
+    } catch {
+      setError("只能申请撤回自己刚下的最后一手。");
+    }
+  }
+
+  async function approveUndo() {
+    if (!session || session.roomId !== roomId) {
+      setError("当前浏览器没有这个房间的玩家身份。");
+      return;
+    }
+    try {
+      await ackOrThrow<PublicRoomState>("game:undoApprove", {
+        roomId,
+        playerToken: session.playerToken
+      });
+      setError("");
+    } catch {
+      setError("当前没有可同意的悔棋申请。");
+    }
+  }
+
+  async function restartReady() {
+    if (!session || session.roomId !== roomId) {
+      setError("当前浏览器没有这个房间的玩家身份。");
+      return;
+    }
+    try {
+      await ackOrThrow<PublicRoomState>("game:restartReady", {
+        roomId,
+        playerToken: session.playerToken
+      });
+      setError("");
+    } catch {
+      setError("重开请求失败，请稍后再试。");
+    }
   }
 
   async function copyRoomUrl() {
@@ -203,11 +242,13 @@ export function RoomPage({ roomId, onExit }: Props) {
             <PlayerPanel player={room.players.black} color="black" label="黑棋" />
             <PlayerPanel player={room.players.white} color="white" label="白棋" />
             <StatusMessage room={room} myColor={myColor} error={error} />
-            {room.status === "finished" ? (
-              <button type="button" className="primary-action" onClick={restartReady}>
-                准备下一局
-              </button>
-            ) : null}
+            <GameControls
+              room={room}
+              myColor={myColor}
+              onRequestUndo={requestUndo}
+              onApproveUndo={approveUndo}
+              onRestartReady={restartReady}
+            />
           </div>
           <Board room={room} myColor={myColor} onPlaceStone={placeStone} />
           <ChatPanel

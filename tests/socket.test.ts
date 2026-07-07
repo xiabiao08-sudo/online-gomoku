@@ -80,4 +80,35 @@ describe("socket handlers", () => {
     expect(sent.room.chatMessages[0].text).toBe("开局吧");
     expect(broadcastRoom.chatMessages[0].nickname).toBe("黑棋");
   });
+
+  it("supports undo request and opponent approval", async () => {
+    const black = await connectClient();
+    const white = await connectClient();
+
+    const created = await black.emitWithAck("room:create", { nickname: "黑棋" });
+    const joined = await white.emitWithAck("room:join", {
+      roomId: created.room.id,
+      nickname: "白棋"
+    });
+    await black.emitWithAck("game:placeStone", {
+      roomId: created.room.id,
+      playerToken: created.playerToken,
+      point: { x: 4, y: 4 }
+    });
+
+    const requested = await black.emitWithAck("game:undoRequest", {
+      roomId: created.room.id,
+      playerToken: created.playerToken
+    });
+    expect(requested.ok).toBe(true);
+    expect(requested.room.undoRequest.requestedBy).toBe("black");
+
+    const approved = await white.emitWithAck("game:undoApprove", {
+      roomId: created.room.id,
+      playerToken: joined.playerToken
+    });
+    expect(approved.ok).toBe(true);
+    expect(approved.room.board[4][4]).toBe(null);
+    expect(approved.room.currentTurn).toBe("black");
+  });
 });

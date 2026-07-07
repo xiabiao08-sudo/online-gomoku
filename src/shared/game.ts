@@ -26,6 +26,17 @@ export interface ChatMessage {
   createdAt: number;
 }
 
+export interface MoveRecord {
+  point: Point;
+  color: Stone;
+}
+
+export interface PendingUndoRequest {
+  requestedBy: Stone;
+  move: MoveRecord;
+  createdAt: number;
+}
+
 export interface PublicRoomState {
   id: string;
   players: {
@@ -38,7 +49,10 @@ export interface PublicRoomState {
   winner: Stone | null;
   winningLine: Point[];
   lastMove: Point | null;
+  lastMoveColor: Stone | null;
+  moveCount: number;
   restartReady: Record<Stone, boolean>;
+  undoRequest: PendingUndoRequest | null;
   chatMessages: ChatMessage[];
 }
 

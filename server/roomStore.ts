@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import {
   Board,
   ChatMessage,
+  MoveRecord,
+  PendingUndoRequest,
   Point,
   PublicPlayer,
   PublicRoomState,
@@ -31,7 +33,9 @@ interface InternalRoom {
   winner: Stone | null;
   winningLine: Point[];
   lastMove: Point | null;
+  moveHistory: MoveRecord[];
   restartReady: Record<Stone, boolean>;
+  undoRequest: PendingUndoRequest | null;
   chatMessages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
@@ -65,7 +69,9 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
       winner: null,
       winningLine: [],
       lastMove: null,
+      moveHistory: [],
       restartReady: { black: false, white: false },
+      undoRequest: null,
       chatMessages: [],
       createdAt: timestamp,
       updatedAt: timestamp
@@ -88,10 +94,7 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
 
   function reconnect(roomId: string, token: string, socketId: string | null = null): PublicRoomState {
     const room = requireRoom(roomId);
-    const player = findPlayerByToken(room, token);
-    if (!player) {
-      throw new Error("INVALID_TOKEN");
-    }
+    const player = requirePlayerByToken(room, token);
     player.online = true;
     player.socketId = socketId;
     player.lastSeenAt = now();
@@ -101,10 +104,7 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
 
   function markOffline(roomId: string, token: string): PublicRoomState {
     const room = requireRoom(roomId);
-    const player = findPlayerByToken(room, token);
-    if (!player) {
-      throw new Error("INVALID_TOKEN");
-    }
+    const player = requirePlayerByToken(room, token);
     markPlayerOffline(room, player);
     return toPublicRoom(room);
   }
@@ -125,21 +125,17 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
 
   function place(roomId: string, token: string, point: Point): PublicRoomState {
     const room = requireRoom(roomId);
-    const player = findPlayerByToken(room, token);
-    if (!player) {
-      throw new Error("INVALID_TOKEN");
-    }
+    const player = requirePlayerByToken(room, token);
     if (room.status !== "playing") {
       throw new Error("GAME_NOT_PLAYING");
     }
-    if (!room.players.black?.online || !room.players.white?.online) {
-      throw new Error("PLAYER_OFFLINE");
-    }
+    requireBothPlayersOnline(room);
     if (player.color !== room.currentTurn) {
       throw new Error("NOT_YOUR_TURN");
     }
 
     room.board = placeStone(room.board, point, player.color);
+    room.moveHistory.push({ point, color: player.color });
     room.lastMove = point;
     const winningLine = findWinningLine(room.board, point, player.color);
     if (winningLine) {
@@ -150,25 +146,67 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
       room.currentTurn = oppositeTurn(player.color);
     }
     room.restartReady = { black: false, white: false };
+    room.undoRequest = null;
+    room.updatedAt = now();
+    return toPublicRoom(room);
+  }
+
+  function requestUndo(roomId: string, token: string): PublicRoomState {
+    const room = requireRoom(roomId);
+    const player = requirePlayerByToken(room, token);
+    requireBothPlayersOnline(room);
+    const lastMove = room.moveHistory.at(-1);
+    if (!lastMove) {
+      throw new Error("NO_MOVE_TO_UNDO");
+    }
+    if (lastMove.color !== player.color) {
+      throw new Error("ONLY_LAST_MOVER_CAN_REQUEST_UNDO");
+    }
+    room.undoRequest = {
+      requestedBy: player.color,
+      move: lastMove,
+      createdAt: now()
+    };
+    room.updatedAt = now();
+    return toPublicRoom(room);
+  }
+
+  function approveUndo(roomId: string, token: string): PublicRoomState {
+    const room = requireRoom(roomId);
+    const player = requirePlayerByToken(room, token);
+    requireBothPlayersOnline(room);
+    const request = room.undoRequest;
+    if (!request) {
+      throw new Error("NO_UNDO_REQUEST");
+    }
+    if (request.requestedBy === player.color) {
+      throw new Error("OPPONENT_APPROVAL_REQUIRED");
+    }
+    const removed = room.moveHistory.pop();
+    if (!removed) {
+      throw new Error("NO_MOVE_TO_UNDO");
+    }
+    room.board = room.board.map((row, y) =>
+      row.map((cell, x) => (x === removed.point.x && y === removed.point.y ? null : cell))
+    );
+    const previousMove = room.moveHistory.at(-1);
+    room.lastMove = previousMove?.point ?? null;
+    room.currentTurn = removed.color;
+    room.status = room.players.white ? "playing" : "waiting";
+    room.winner = null;
+    room.winningLine = [];
+    room.restartReady = { black: false, white: false };
+    room.undoRequest = null;
     room.updatedAt = now();
     return toPublicRoom(room);
   }
 
   function setRestartReady(roomId: string, token: string): PublicRoomState {
     const room = requireRoom(roomId);
-    const player = findPlayerByToken(room, token);
-    if (!player) {
-      throw new Error("INVALID_TOKEN");
-    }
+    const player = requirePlayerByToken(room, token);
     room.restartReady[player.color] = true;
     if (room.restartReady.black && room.restartReady.white) {
-      room.board = createEmptyBoard();
-      room.currentTurn = "black";
-      room.status = room.players.white ? "playing" : "waiting";
-      room.winner = null;
-      room.winningLine = [];
-      room.lastMove = null;
-      room.restartReady = { black: false, white: false };
+      resetGame(room);
     }
     room.updatedAt = now();
     return toPublicRoom(room);
@@ -176,10 +214,7 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
 
   function addChatMessage(roomId: string, token: string, text: string): PublicRoomState {
     const room = requireRoom(roomId);
-    const player = findPlayerByToken(room, token);
-    if (!player) {
-      throw new Error("INVALID_TOKEN");
-    }
+    const player = requirePlayerByToken(room, token);
     const trimmedText = text.replace(/\s+/g, " ").trim();
     if (!trimmedText) {
       throw new Error("CHAT_MESSAGE_REQUIRED");
@@ -221,6 +256,8 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
     markOffline,
     markOfflineBySocket,
     placeStone: place,
+    requestUndo,
+    approveUndo,
     setRestartReady,
     addChatMessage,
     deleteInactiveRooms,
@@ -235,12 +272,38 @@ export function createRoomStore(options: RoomStoreOptions = {}) {
     return room;
   }
 
+  function requirePlayerByToken(room: InternalRoom, token: string): InternalPlayer {
+    const player = findPlayerByToken(room, token);
+    if (!player) {
+      throw new Error("INVALID_TOKEN");
+    }
+    return player;
+  }
+
+  function requireBothPlayersOnline(room: InternalRoom): void {
+    if (!room.players.black?.online || !room.players.white?.online) {
+      throw new Error("PLAYER_OFFLINE");
+    }
+  }
+
   function markPlayerOffline(room: InternalRoom, player: InternalPlayer): void {
     player.online = false;
     player.socketId = null;
     player.lastSeenAt = now();
     room.updatedAt = now();
   }
+}
+
+function resetGame(room: InternalRoom): void {
+  room.board = createEmptyBoard();
+  room.currentTurn = "black";
+  room.status = room.players.white ? "playing" : "waiting";
+  room.winner = null;
+  room.winningLine = [];
+  room.lastMove = null;
+  room.moveHistory = [];
+  room.restartReady = { black: false, white: false };
+  room.undoRequest = null;
 }
 
 function createPlayer(
@@ -297,6 +360,7 @@ function toPublicPlayer(player: InternalPlayer | null): PublicPlayer | null {
 }
 
 function toPublicRoom(room: InternalRoom): PublicRoomState {
+  const lastMove = room.moveHistory.at(-1) ?? null;
   return {
     id: room.id,
     players: {
@@ -309,7 +373,10 @@ function toPublicRoom(room: InternalRoom): PublicRoomState {
     winner: room.winner,
     winningLine: room.winningLine,
     lastMove: room.lastMove,
+    lastMoveColor: lastMove?.color ?? null,
+    moveCount: room.moveHistory.length,
     restartReady: { ...room.restartReady },
+    undoRequest: room.undoRequest ? { ...room.undoRequest } : null,
     chatMessages: [...room.chatMessages]
   };
 }

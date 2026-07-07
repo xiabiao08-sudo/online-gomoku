@@ -10,6 +10,7 @@ describe("room store", () => {
     expect(result.room.status).toBe("waiting");
     expect(result.playerToken).toHaveLength(32);
     expect(result.room.chatMessages).toEqual([]);
+    expect(result.room.moveCount).toBe(0);
   });
 
   it("joins a second player as white and starts the game", () => {
@@ -49,6 +50,63 @@ describe("room store", () => {
     expect(finished.status).toBe("finished");
     expect(finished.winner).toBe("black");
     expect(finished.winningLine).toHaveLength(5);
+    expect(finished.moveCount).toBe(9);
+  });
+
+  it("undoes the last move only after opponent approval", () => {
+    const store = createRoomStore({ now: () => 1234 });
+    const black = store.createRoom("黑棋");
+    const white = store.joinRoom(black.room.id, "白棋");
+    const roomId = black.room.id;
+
+    store.placeStone(roomId, black.playerToken, { x: 3, y: 3 });
+    const requested = store.requestUndo(roomId, black.playerToken);
+    expect(requested.undoRequest).toMatchObject({
+      requestedBy: "black",
+      move: { point: { x: 3, y: 3 }, color: "black" },
+      createdAt: 1234
+    });
+    expect(() => store.approveUndo(roomId, black.playerToken)).toThrow(
+      "OPPONENT_APPROVAL_REQUIRED"
+    );
+
+    const undone = store.approveUndo(roomId, white.playerToken);
+    expect(undone.board[3][3]).toBe(null);
+    expect(undone.currentTurn).toBe("black");
+    expect(undone.lastMove).toBe(null);
+    expect(undone.lastMoveColor).toBe(null);
+    expect(undone.moveCount).toBe(0);
+    expect(undone.undoRequest).toBe(null);
+  });
+
+  it("rejects undo requests from a player who did not make the last move", () => {
+    const store = createRoomStore();
+    const black = store.createRoom("黑棋");
+    const white = store.joinRoom(black.room.id, "白棋");
+    store.placeStone(black.room.id, black.playerToken, { x: 0, y: 0 });
+
+    expect(() => store.requestUndo(black.room.id, white.playerToken)).toThrow(
+      "ONLY_LAST_MOVER_CAN_REQUEST_UNDO"
+    );
+  });
+
+  it("restarts the game after both players agree", () => {
+    const store = createRoomStore();
+    const black = store.createRoom("黑棋");
+    const white = store.joinRoom(black.room.id, "白棋");
+    const roomId = black.room.id;
+
+    store.placeStone(roomId, black.playerToken, { x: 0, y: 0 });
+    const waiting = store.setRestartReady(roomId, black.playerToken);
+    expect(waiting.restartReady.black).toBe(true);
+    expect(waiting.board[0][0]).toBe("black");
+
+    const restarted = store.setRestartReady(roomId, white.playerToken);
+    expect(restarted.board.flat().every((cell) => cell === null)).toBe(true);
+    expect(restarted.currentTurn).toBe("black");
+    expect(restarted.status).toBe("playing");
+    expect(restarted.moveCount).toBe(0);
+    expect(restarted.restartReady).toEqual({ black: false, white: false });
   });
 
   it("adds chat messages from a room player", () => {

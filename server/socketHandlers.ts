@@ -77,6 +77,28 @@ export function registerSocketHandlers(io: Server, store: RoomStore): void {
     });
 
     socket.on(
+      "game:undoRequest",
+      (payload: { roomId: string; playerToken: string }, ack: Ack) => {
+        respond(ack, () => {
+          const room = store.requestUndo(payload.roomId, payload.playerToken);
+          io.to(payload.roomId).emit("room:state", room);
+          return { ok: true, room };
+        });
+      }
+    );
+
+    socket.on(
+      "game:undoApprove",
+      (payload: { roomId: string; playerToken: string }, ack: Ack) => {
+        respond(ack, () => {
+          const room = store.approveUndo(payload.roomId, payload.playerToken);
+          io.to(payload.roomId).emit("room:state", room);
+          return { ok: true, room };
+        });
+      }
+    );
+
+    socket.on(
       "game:restartReady",
       (payload: { roomId: string; playerToken: string }, ack: Ack) => {
         respond(ack, () => {

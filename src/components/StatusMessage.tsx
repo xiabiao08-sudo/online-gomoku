@@ -16,7 +16,7 @@ export function StatusMessage({ room, myColor, error }: Props) {
   if (room.status === "finished") {
     return (
       <p className="status-text strong" role="status">
-        {room.winner === "black" ? "黑棋" : "白棋"}获胜，双方准备后开始下一局。
+        {room.winner === "black" ? "黑棋" : "白棋"}获胜，可以请求重开。
       </p>
     );
   }
