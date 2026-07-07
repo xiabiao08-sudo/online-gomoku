@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: online-gomoku
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    numInstances: 1
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
