@@ -2,6 +2,26 @@
 
 这个项目是 React + Express + Socket.IO 的单体 Node Web 服务。公网演示版必须部署成支持 WebSocket 的 Node 服务，不能只部署成纯静态站点，否则实时联机会失效。
 
+## 当前固定演示地址
+
+Render Web Service：
+
+```text
+https://online-gomoku-wjzw.onrender.com
+```
+
+健康检查：
+
+```text
+https://online-gomoku-wjzw.onrender.com/health
+```
+
+Render Dashboard：
+
+```text
+https://dashboard.render.com/web/srv-d9673u77f7vs73d271bg
+```
+
 ## 为什么临时链接会打不开
 
 `trycloudflare.com` Quick Tunnel 是临时隧道，适合快速演示：

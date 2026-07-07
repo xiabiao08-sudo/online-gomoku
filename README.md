@@ -44,6 +44,20 @@ LAN share URL: http://192.168.x.x:8788
 
 如果朋友不在同一个 Wi-Fi / 局域网，必须使用公网部署或公网隧道。临时 Cloudflare Quick Tunnel 链接可以演示，但链接会变，不能保证长期可用。稳定方案见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
+## 固定公网演示
+
+Render Web Service 已部署：
+
+```text
+https://online-gomoku-wjzw.onrender.com
+```
+
+健康检查：
+
+```text
+https://online-gomoku-wjzw.onrender.com/health
+```
+
 ## 项目入口
 
 - 公网部署说明：[DEPLOYMENT.md](DEPLOYMENT.md)

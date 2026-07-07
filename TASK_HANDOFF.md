@@ -12,6 +12,9 @@
 - 服务端默认监听 `0.0.0.0`，本地端口为 `8788`。
 - 本机地址：`http://127.0.0.1:8788/`
 - 同 Wi-Fi 地址会由 `/api/share-info` 和启动日志提供，形如 `http://192.168.x.x:8788/`。
+- 固定公网地址：`https://online-gomoku-wjzw.onrender.com`
+- Render 服务 ID：`srv-d9673u77f7vs73d271bg`
+- GitHub 仓库：`https://github.com/xiabiao08-sudo/online-gomoku`
 - 当前棋盘为 19 x 19，自由五子棋规则，黑棋先手。
 - 已加入房间聊天，双方可发文字消息，最近保留 50 条。
 - 棋盘线条按 `BOARD_SIZE` 动态计算，避免 15 路样式套到 19 路棋盘。
@@ -56,3 +59,4 @@ npm start
 - WebSocket 部署平台必须支持长连接。
 - 本地 LAN 地址只能给同一局域网设备访问；不同网络的朋友需要公网部署或公网隧道。
 - Quick Tunnel 链接不稳定，不能作为固定网址。
+- Render Free 计划可能冷启动，长时间没人访问后第一次打开会慢一些。
