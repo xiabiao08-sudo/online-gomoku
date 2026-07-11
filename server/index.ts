@@ -1,5 +1,7 @@
 import express from "express";
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { Server } from "socket.io";
 import { createRoomStore } from "./roomStore";
 import { registerSocketHandlers } from "./socketHandlers";
@@ -31,6 +33,11 @@ const roomStore = createRoomStore();
 app.disable("x-powered-by");
 registerSocketHandlers(io, roomStore);
 
+const clientBuildDirectory = resolve(process.cwd(), "dist");
+if (existsSync(clientBuildDirectory)) {
+  app.use(express.static(clientBuildDirectory));
+}
+
 const cleanupTimer = setInterval(() => {
   roomStore.deleteInactiveRooms();
 }, 5 * 60 * 1000);
@@ -41,13 +48,8 @@ app.get(["/health", "/api/health"], (_request, response) => {
   response.status(200).json({ ok: true, service: "qizheyiy-gomoku-api" });
 });
 
-app.get("/", (_request, response) => {
-  response.setHeader("Cache-Control", "no-store");
-  response.status(200).json({
-    name: "棋者弈也",
-    service: "realtime-api",
-    ok: true
-  });
+app.get("*", (_request, response) => {
+  response.sendFile(resolve(clientBuildDirectory, "index.html"));
 });
 
 httpServer.requestTimeout = 30_000;
