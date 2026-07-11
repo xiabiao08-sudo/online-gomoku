@@ -8,7 +8,10 @@ import { registerSocketHandlers } from "./socketHandlers";
 
 const port = parsePort(process.env.PORT);
 const host = process.env.HOST ?? "0.0.0.0";
-const allowedOrigins = parseAllowedOrigins(process.env.FRONTEND_ORIGINS);
+const allowedOrigins = parseAllowedOrigins(
+  process.env.FRONTEND_ORIGINS,
+  process.env.RENDER_EXTERNAL_URL
+);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -93,12 +96,17 @@ function parsePort(rawPort: string | undefined): number {
   return parsed;
 }
 
-function parseAllowedOrigins(rawOrigins: string | undefined): Set<string> {
+function parseAllowedOrigins(
+  rawOrigins: string | undefined,
+  externalUrl: string | undefined
+): Set<string> {
   const defaults = [
     "http://localhost:5173",
     "http://127.0.0.1:5173"
   ];
-  const configured = (rawOrigins ?? "")
+  const configured = [rawOrigins, externalUrl]
+    .filter(Boolean)
+    .join(",")
     .split(",")
     .map((origin) => origin.trim().replace(/\/$/, ""))
     .filter(Boolean);

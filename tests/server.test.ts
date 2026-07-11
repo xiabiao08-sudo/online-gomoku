@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
+import { io } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
 
 const processes: ChildProcess[] = [];
@@ -27,6 +28,35 @@ describe("production server", () => {
 
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(await response.text()).toContain('<div id="root"></div>');
+  });
+
+  it("accepts Socket.IO connections from its own Render URL", async () => {
+    const port = await findFreePort();
+    const origin = `http://127.0.0.1:${port}`;
+    const child = spawn(process.execPath, ["node_modules/tsx/dist/cli.mjs", "server/index.ts"], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PORT: String(port),
+        HOST: "127.0.0.1",
+        NODE_ENV: "production",
+        RENDER_EXTERNAL_URL: origin
+      },
+      stdio: "ignore"
+    });
+    processes.push(child);
+    await waitForResponse(`${origin}/health`);
+
+    const client = io(origin, {
+      transports: ["polling"],
+      extraHeaders: { Origin: origin },
+      timeout: 2_000
+    });
+    await new Promise<void>((resolve, reject) => {
+      client.once("connect", resolve);
+      client.once("connect_error", reject);
+    });
+    client.close();
   });
 });
 
