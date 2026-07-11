@@ -1,8 +1,7 @@
 import { io } from "socket.io-client";
 import { ChatMessage, ParticipantRole, Stone } from "../shared/game";
 
-const configuredUrl = import.meta.env.VITE_SOCKET_URL?.trim();
-const socketUrl = configuredUrl || (import.meta.env.DEV ? "http://localhost:8788" : undefined);
+const socketUrl = import.meta.env.DEV ? "http://localhost:8788" : undefined;
 
 export const socket = io(socketUrl, {
   autoConnect: true,
