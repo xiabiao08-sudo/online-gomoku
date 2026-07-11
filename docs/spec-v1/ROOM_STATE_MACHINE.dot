@@ -1,0 +1,38 @@
+digraph RoomMachine {
+  graph [rankdir=LR, bgcolor="white", pad="0.3", nodesep="0.55", ranksep="0.75", fontname="Noto Sans CJK SC"];
+  node [shape=ellipse, style="filled", fillcolor="#F6F1E7", color="#6B5A45", fontname="Noto Sans CJK SC", fontsize=12, margin="0.18,0.1"];
+  edge [color="#6B5A45", fontname="Noto Sans CJK SC", fontsize=9];
+
+  Start [shape=point, label=""];
+  WAITING [label="WAITING\n等待第二棋手"];
+  STARTING [label="STARTING\n分色/换色倒计时"];
+  PLAYING [label="PLAYING\n正常对局", fillcolor="#E7F0E2"];
+  PAUSED [label="PAUSED\n棋手离线暂停", fillcolor="#FFF1D6"];
+  FINISHED [label="FINISHED\n胜负或和棋", fillcolor="#E8E2F2"];
+  CLOSED [label="CLOSED\n通知并删除", fillcolor="#F7E5E1"];
+  End [shape=doublecircle, label="删除"];
+
+  Start -> WAITING [label="room:create"];
+  WAITING -> STARTING [label="第二棋手加入\n服务端随机分色"];
+  STARTING -> PLAYING [label="now ≥ startsAt\n且双方在线"];
+  STARTING -> PAUSED [label="开始前棋手离线"];
+  PLAYING -> PLAYING [label="合法落子\n无胜负"];
+  PLAYING -> PAUSED [label="棋手断线/离开"];
+  PAUSED -> PLAYING [label="双方恢复在线"];
+  PLAYING -> FINISHED [label="五连或满盘"];
+  FINISHED -> STARTING [label="双方确认再战\n交换颜色+清盘"];
+
+  WAITING -> CLOSED [label="双方明确离开/结束"];
+  STARTING -> CLOSED [label="双方明确离开/结束"];
+  PLAYING -> CLOSED [label="双方明确离开/结束"];
+  PAUSED -> CLOSED [label="双方明确离开/结束"];
+  FINISHED -> CLOSED [label="双方明确离开/结束"];
+  CLOSED -> End;
+
+  Undo [shape=box, style="rounded,filled", label="附属状态：pendingUndo\n存在时禁止落子", fillcolor="#F2EAD9"];
+  Rematch [shape=box, style="rounded,filled", label="附属状态：rematchReady\n双方确认后换色", fillcolor="#F2EAD9"];
+  PLAYING -> Undo [style=dashed, label="申请"];
+  Undo -> PLAYING [style=dashed, label="同意/拒绝/取消"];
+  FINISHED -> Rematch [style=dashed, label="一方确认"];
+  Rematch -> STARTING [style=dashed, label="双方确认"];
+}

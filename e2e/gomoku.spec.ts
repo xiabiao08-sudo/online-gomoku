@@ -1,60 +1,96 @@
 import { Browser, Page, expect, test } from "@playwright/test";
 
 async function createJoinedRoom(browser: Browser) {
-  const blackContext = await browser.newContext();
-  const whiteContext = await browser.newContext();
-  const blackPage = await blackContext.newPage();
-  const whitePage = await whiteContext.newPage();
+  const creatorContext = await browser.newContext();
+  const joinerContext = await browser.newContext();
+  const creatorPage = await creatorContext.newPage();
+  const joinerPage = await joinerContext.newPage();
 
-  await blackPage.goto("/");
-  await blackPage.getByLabel("昵称").fill("黑棋玩家");
-  await blackPage.getByRole("button", { name: "创建房间" }).click();
-  await expect(blackPage.getByText("房间号")).toBeVisible();
+  await creatorPage.goto("/");
+  await expect(creatorPage.getByText("游戏服务器已连接")).toBeVisible({ timeout: 30_000 });
+  await creatorPage.getByLabel("你的昵称").fill("创建者");
+  await creatorPage.getByRole("button", { name: "创建棋局" }).click();
+  await expect(creatorPage.getByText("房间号")).toBeVisible();
 
-  const roomUrl = blackPage.url();
-  await whitePage.goto(roomUrl);
-  await whitePage.getByLabel("昵称").fill("白棋玩家");
-  await whitePage.getByRole("button", { name: "加入房间" }).click();
+  const roomUrl = creatorPage.url();
+  await joinerPage.goto(roomUrl);
+  await expect(joinerPage.getByText("游戏服务器已连接")).toBeVisible({ timeout: 30_000 });
+  await joinerPage.getByLabel("昵称").fill("加入者");
+  await joinerPage.getByRole("button", { name: "加入棋局" }).click();
 
-  await expect(blackPage.getByText("黑棋玩家")).toBeVisible();
-  await expect(blackPage.getByText("白棋玩家")).toBeVisible();
-  await expect(whitePage.getByText("黑棋玩家")).toBeVisible();
-  await expect(whitePage.getByText("白棋玩家")).toBeVisible();
+  await expect(creatorPage.getByText("创建者")).toBeVisible();
+  await expect(creatorPage.getByText("加入者")).toBeVisible();
+  await expect(creatorPage.getByText(/你执(黑|白)/)).toBeVisible({ timeout: 10_000 });
+  await expect(joinerPage.getByText(/你执(黑|白)/)).toBeVisible({ timeout: 10_000 });
+  await expect(
+    creatorPage.locator("p.status-text").filter({ hasText: "正在随机分配黑白" })
+  ).toBeHidden({ timeout: 10_000 });
 
-  return { blackContext, whiteContext, blackPage, whitePage };
+  const creatorIsBlack = await creatorPage.getByText("你执黑").isVisible();
+  const blackPage = creatorIsBlack ? creatorPage : joinerPage;
+  const whitePage = creatorIsBlack ? joinerPage : creatorPage;
+  await expect(blackPage.getByText(/轮到你落子/)).toBeVisible({ timeout: 10_000 });
+
+  return {
+    creatorContext,
+    joinerContext,
+    creatorPage,
+    joinerPage,
+    blackPage,
+    whitePage,
+    roomUrl
+  };
 }
 
-async function clickPoint(page: Page, label: string) {
-  await page.getByRole("button", { name: label, exact: true }).click();
+function pointLabel(x: number, y: number) {
+  return `第 ${x} 列，第 ${y} 行，空位`;
 }
 
-test("two players can create and join a room", async ({ browser }) => {
-  const { blackContext, whiteContext } = await createJoinedRoom(browser);
+async function clickPoint(page: Page, x: number, y: number) {
+  await page.getByRole("button", { name: pointLabel(x, y), exact: true }).press("Enter");
+  await expect(page.getByText(`候选位置：第 ${x} 列，第 ${y} 行`)).toBeVisible();
+  await page.locator(".placement-panel").getByRole("button", { name: "确认落子" }).click();
+}
 
-  await blackContext.close();
-  await whiteContext.close();
+test("two players receive random colors and can place a move", async ({ browser }) => {
+  const room = await createJoinedRoom(browser);
+  await clickPoint(room.blackPage, 10, 10);
+  await expect(room.blackPage.locator(".stone.black")).toHaveCount(1);
+  await room.creatorContext.close();
+  await room.joinerContext.close();
 });
 
-test("players can alternate moves and finish with black five in a row", async ({ browser }) => {
-  const { blackContext, whiteContext, blackPage, whitePage } = await createJoinedRoom(browser);
+test("a third participant joins as spectator and can chat", async ({ browser }) => {
+  const room = await createJoinedRoom(browser);
+  const spectatorContext = await browser.newContext();
+  const spectatorPage = await spectatorContext.newPage();
+  await spectatorPage.goto(room.roomUrl);
+  await spectatorPage.getByLabel("昵称").fill("观众甲");
+  await spectatorPage.getByRole("button", { name: "加入棋局" }).click();
+  await expect(spectatorPage.getByText("你当前在观众席")).toBeVisible();
+  await spectatorPage.getByPlaceholder(/输入消息/).fill("好棋");
+  await spectatorPage.getByRole("button", { name: "发送" }).click();
+  await expect(spectatorPage.getByText("好棋")).toBeVisible();
+  await spectatorContext.close();
+  await room.creatorContext.close();
+  await room.joinerContext.close();
+});
 
-  await clickPoint(blackPage, "1列1行空位");
-  await clickPoint(whitePage, "1列2行空位");
-  await clickPoint(blackPage, "2列1行空位");
-  await clickPoint(whitePage, "2列2行空位");
-  await clickPoint(blackPage, "3列1行空位");
-  await clickPoint(whitePage, "3列2行空位");
-  await clickPoint(blackPage, "4列1行空位");
-  await clickPoint(whitePage, "4列2行空位");
-  await clickPoint(blackPage, "5列1行空位");
+test("a finished game supports rematch with swapped colors", async ({ browser }) => {
+  const room = await createJoinedRoom(browser);
+  for (let x = 1; x <= 4; x += 1) {
+    await clickPoint(room.blackPage, x, 1);
+    await clickPoint(room.whitePage, x, 2);
+  }
+  await clickPoint(room.blackPage, 5, 1);
+  await expect(room.blackPage.getByRole("heading", { name: "黑棋获胜" })).toBeVisible();
 
-  await expect(blackPage.getByText("黑棋获胜")).toBeVisible();
-  await expect(whitePage.getByText("黑棋获胜")).toBeVisible();
+  await room.blackPage.getByLabel("对局结果").getByRole("button", { name: "再来一局" }).click();
+  await room.whitePage.getByRole("button", { name: "同意再来一局" }).click();
+  await expect(room.blackPage.getByText("第 2 局")).toBeVisible();
+  await expect(room.blackPage.getByText("你执白")).toBeVisible();
+  await expect(room.whitePage.getByText("你执黑")).toBeVisible();
 
-  await blackPage.reload();
-  await expect(blackPage.getByText("黑棋玩家")).toBeVisible();
-  await expect(blackPage.getByText("黑棋获胜")).toBeVisible();
-
-  await blackContext.close();
-  await whiteContext.close();
+  await room.creatorContext.close();
+  await room.joinerContext.close();
 });

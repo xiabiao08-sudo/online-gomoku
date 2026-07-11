@@ -5,6 +5,7 @@ interface Props {
   myColor: Stone | null;
   onRequestUndo: () => Promise<void>;
   onApproveUndo: () => Promise<void>;
+  onRejectUndo: () => Promise<void>;
   onRestartReady: () => Promise<void>;
 }
 
@@ -13,73 +14,53 @@ export function GameControls({
   myColor,
   onRequestUndo,
   onApproveUndo,
+  onRejectUndo,
   onRestartReady
 }: Props) {
   const opponentColor = myColor ? (myColor === "black" ? "white" : "black") : null;
-  const canRequestUndo =
-    Boolean(myColor) &&
-    room.moveCount > 0 &&
-    room.lastMoveColor === myColor &&
-    !room.undoRequest &&
-    room.players.black?.online &&
-    room.players.white?.online;
-  const canApproveUndo =
-    Boolean(myColor) &&
-    Boolean(room.undoRequest) &&
-    room.undoRequest?.requestedBy === opponentColor;
+  const bothOnline = Boolean(
+    room.players.black?.online && room.players.white?.online &&
+    !room.players.black.left && !room.players.white.left
+  );
+  const canRequestUndo = Boolean(myColor) && room.status === "playing" && room.moveCount > 0 && !room.undoRequest && bothOnline;
+  const canRespondUndo = Boolean(myColor) && Boolean(room.undoRequest) && room.undoRequest?.requestedBy === opponentColor;
   const myRestartReady = myColor ? room.restartReady[myColor] : false;
   const opponentRestartReady = opponentColor ? room.restartReady[opponentColor] : false;
-  const restartLabel = opponentRestartReady ? "同意重开" : myRestartReady ? "等待对方同意" : "请求重开";
-  const undoText = renderUndoText(room, myColor);
-  const restartText = renderRestartText(room, myColor);
+  const restartLabel = opponentRestartReady ? "同意再来一局" : myRestartReady ? "等待对方同意" : "再来一局";
 
   return (
     <section className="game-controls" aria-label="对局操作">
-      <button type="button" onClick={onRequestUndo} disabled={!canRequestUndo}>
-        申请悔棋
-      </button>
-      <button type="button" onClick={onApproveUndo} disabled={!canApproveUndo}>
-        同意悔棋
-      </button>
-      <button type="button" onClick={onRestartReady} disabled={!myColor || myRestartReady}>
+      <button type="button" onClick={onRequestUndo} disabled={!canRequestUndo}>申请撤回上一手</button>
+      {canRespondUndo ? (
+        <div className="control-pair">
+          <button type="button" className="primary-action" onClick={onApproveUndo}>同意撤回</button>
+          <button type="button" onClick={onRejectUndo}>拒绝</button>
+        </div>
+      ) : null}
+      <button type="button" onClick={onRestartReady} disabled={!myColor || room.status !== "finished" || myRestartReady}>
         {restartLabel}
       </button>
-      <p>{undoText}</p>
-      <p>{restartText}</p>
+      <p>{renderUndoText(room, myColor)}</p>
+      <p>{renderRestartText(room, myColor)}</p>
     </section>
   );
 }
 
 function renderUndoText(room: PublicRoomState, myColor: Stone | null) {
-  if (!room.undoRequest) {
-    if (room.moveCount === 0) {
-      return "还没有可悔棋的落子。";
-    }
-    if (room.lastMoveColor === myColor) {
-      return "如果刚才点错位置，可以申请悔棋。";
-    }
-    return "只有刚落子的玩家可以申请悔棋。";
-  }
+  if (!myColor) return "观众不能申请或处理悔棋。";
+  if (room.status === "finished") return "棋局结束后不能悔棋，只能再来一局。";
+  if (!room.undoRequest) return room.moveCount === 0 ? "还没有可撤回的落子。" : "双方同意后，只撤回棋盘上的最新一颗。";
   const requester = room.undoRequest.requestedBy === "black" ? "黑棋" : "白棋";
-  if (room.undoRequest.requestedBy === myColor) {
-    return `已向对方申请悔棋：${requester}最后一手。`;
-  }
-  return `${requester}申请悔棋，确认后会撤回最后一手。`;
+  return room.undoRequest.requestedBy === myColor
+    ? `已申请撤回上一手，等待对方处理。`
+    : `${requester}申请撤回上一手，对局暂时停止。`;
 }
 
 function renderRestartText(room: PublicRoomState, myColor: Stone | null) {
-  if (!myColor) {
-    return "加入房间后可以请求重开。";
-  }
+  if (!myColor) return "观众不能请求再来一局。";
+  if (room.status !== "finished") return "胜负或和棋产生后，可以请求再来一局。";
   const opponentColor = myColor === "black" ? "white" : "black";
-  if (room.restartReady.black && room.restartReady.white) {
-    return "正在重开。";
-  }
-  if (room.restartReady[opponentColor]) {
-    return "对方请求重开，同意后清空棋盘重新开始。";
-  }
-  if (room.restartReady[myColor]) {
-    return "已请求重开，等待对方同意。";
-  }
-  return "双方同意后可立即清空棋盘重开。";
+  if (room.restartReady[opponentColor]) return "对方已同意；你确认后双方交换黑白。";
+  if (room.restartReady[myColor]) return "已请求再来一局，等待对方同意。";
+  return "双方同意后自动交换黑白，新黑棋先行。";
 }

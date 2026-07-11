@@ -1,17 +1,18 @@
 {
-  "name": "online-gomoku",
-  "version": "0.1.0",
+  "name": "qizheyiy-online-gomoku",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx server/index.ts",
+    "dev:web": "vite",
+    "dev:api": "tsx watch server/index.ts",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "preview": "tsx server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "check": "npm run test && npm run build"
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test && npm run build"
   },
   "engines": {
     "node": ">=22.12.0"

@@ -1,74 +1,86 @@
-# 在线联机五子棋
+# 棋者弈也
 
-网页好友房五子棋 MVP。用户不登录，输入昵称后创建或加入房间，双方通过 Socket.IO 实时对弈。
+**好友五子棋 · ONLINE GOMOKU**
 
-**在线试玩：** [https://online-gomoku-wjzw.onrender.com](https://online-gomoku-wjzw.onrender.com)
+一个面向朋友之间快速开局的 19×19 在线五子棋。无需注册：创建棋局、分享链接、两名棋手对弈，后来者进入观众席。
 
-## 当前功能
+## V1 功能
 
-- 19 x 19 自由五子棋，黑白双方五连即胜，不做禁手。
-- 好友房：创建房间、复制房间号或链接、两人进入后开局。
-- 服务端权威判定落子、轮次、胜负和再来一局。
-- 悔棋需要对方同意：只能申请撤回自己刚下的最后一手。
-- 双方同意后可随时重开，清空棋盘重新开始。
-- 刷新后使用本地 token 恢复身份。
-- 房间聊天：双方可发送文字消息，最近保留 50 条。
-- 本地、局域网、临时公网隧道、正式公网部署分开处理。
+- 19×19 自由五子棋，无禁手
+- 五子或以上立即获胜，满盘无胜者判和
+- 第一局由服务端随机分配黑白
+- 后续每局自动交换黑白
+- 移动端默认启用“预览后确认”，设置保存在当前设备
+- 5×5 落子放大预览
+- 棋盘按钮缩放、双指缩放、放大后单指拖动
+- 最多 5 名观众；观众可以看棋和实时聊天
+- 新加入、刷新或重连后不补发历史聊天
+- 悔棋只撤回最新一颗，需要对方同意；胜负后不能悔棋
+- 棋手断线后暂停，等待原棋手恢复；观众不会补位
+- 两名棋手都明确离开后立即关闭房间
+- 前端静态站点与 Socket.IO 后端拆分部署
 
-## 常用命令
+## 本地开发
 
-```powershell
-npm install
-npm run test
+要求 Node.js 22.12 或更高版本。
+
+```bash
+npm ci
+```
+
+终端一：
+
+```bash
+npm run dev:api
+```
+
+终端二：
+
+```bash
+npm run dev:web
+```
+
+打开 `http://localhost:5173`。
+
+默认本地前端连接 `http://localhost:8788`；也可以复制环境变量示例：
+
+```bash
+cp .env.frontend.example .env.local
+cp .env.backend.example .env
+```
+
+## 检查
+
+```bash
+npm run typecheck
+npm test
 npm run build
-npm run preview
-npm run test:e2e
 ```
 
-## 本地运行
+一次运行全部检查：
 
-```powershell
-npm run build
-npm run preview
+```bash
+npm run check
 ```
 
-本机打开：
+## Render 部署
 
-```text
-http://127.0.0.1:8788/
-```
+仓库根目录的 `render.yaml` 会创建两个服务：
 
-同一 Wi-Fi / 局域网内分享时，启动日志会打印类似：
+- `qizheyiy-gomoku-web`：Render Static Site
+- `qizheyiy-gomoku-api`：Render Free Web Service
 
-```text
-LAN share URL: http://192.168.x.x:8788
-```
+详细步骤见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 
-把页面显示的 `http://192.168.x.x:8788/room/<房间号>` 分享给同一局域网里的朋友。不要分享 `127.0.0.1` 或 `localhost` 开头的链接，它们只代表每个人自己的设备。
+## 重要限制
 
-如果朋友不在同一个 Wi-Fi / 局域网，必须使用公网部署或公网隧道。临时 Cloudflare Quick Tunnel 链接可以演示，但链接会变，不能保证长期可用。稳定方案见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+- 房间与棋局仅保存在后端进程内存中。
+- 后端重启、重新部署或休眠恢复导致进程重建时，旧房间会消失。
+- 当前限制为单个后端实例；没有账号、数据库、匹配、排行或永久战绩。
+- 免费后端冷启动时，静态前端仍可打开并显示连接状态。
 
-## 固定公网演示
+## 产品与技术规格
 
-Render Web Service 已部署：
+完整规格位于 [`docs/spec-v1`](./docs/spec-v1/README.md)。
 
-```text
-https://online-gomoku-wjzw.onrender.com
-```
-
-健康检查：
-
-```text
-https://online-gomoku-wjzw.onrender.com/health
-```
-
-## 项目入口
-
-- 公网部署说明：[DEPLOYMENT.md](DEPLOYMENT.md)
-- 任务交接：[TASK_HANDOFF.md](TASK_HANDOFF.md)
-- 项目复盘：[docs/retrospectives/2026-07-06-online-gomoku-retrospective.md](docs/retrospectives/2026-07-06-online-gomoku-retrospective.md)
-- 小游戏 MVP 复用模板：[docs/retrospectives/GAME_MVP_PLAYBOOK.md](docs/retrospectives/GAME_MVP_PLAYBOOK.md)
-
-## 非目标
-
-当前版本不做账号、排行榜、观战、悔棋、计时、AI、随机匹配或数据库持久化。房间状态存在服务端内存中，服务重启后会丢失。
+效果图位于 [`docs/previews`](./docs/previews)。

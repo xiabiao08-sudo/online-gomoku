@@ -1,172 +1,125 @@
 import { describe, expect, it } from "vitest";
 import { createRoomStore } from "../server/roomStore";
 
+function setupGame(options: Parameters<typeof createRoomStore>[0] = {}) {
+  const store = createRoomStore({ random: () => 1, startingDelayMs: 0, ...options });
+  const black = store.createRoom("黑棋");
+  const white = store.joinRoom(black.room.id, "白棋");
+  store.activateRound(black.room.id);
+  return { store, black, white, roomId: black.room.id };
+}
+
+function finishBlackWin(store: ReturnType<typeof createRoomStore>, roomId: string, blackToken: string, whiteToken: string) {
+  for (let x = 0; x < 4; x += 1) {
+    store.placeStone(roomId, blackToken, { x, y: 0 });
+    store.placeStone(roomId, whiteToken, { x, y: 1 });
+  }
+  return store.placeStone(roomId, blackToken, { x: 4, y: 0 });
+}
+
 describe("room store", () => {
-  it("creates a room with black player", () => {
+  it("creates a waiting room", () => {
     const store = createRoomStore();
     const result = store.createRoom("主人");
     expect(result.room.players.black?.nickname).toBe("主人");
     expect(result.room.players.white).toBe(null);
     expect(result.room.status).toBe("waiting");
     expect(result.playerToken).toHaveLength(32);
-    expect(result.room.chatMessages).toEqual([]);
-    expect(result.room.moveCount).toBe(0);
   });
 
-  it("joins a second player as white and starts the game", () => {
-    const store = createRoomStore();
-    const created = store.createRoom("黑棋");
-    const joined = store.joinRoom(created.room.id, "白棋");
-    expect(joined.room.players.white?.nickname).toBe("白棋");
-    expect(joined.room.status).toBe("playing");
-    expect(joined.room.currentTurn).toBe("black");
+  it("randomizes first-round colors on the server", () => {
+    const store = createRoomStore({ random: () => 0, startingDelayMs: 0 });
+    const creator = store.createRoom("创建者");
+    const joiner = store.joinRoom(creator.room.id, "加入者");
+    const started = store.activateRound(creator.room.id);
+    expect(started.players.black?.nickname).toBe("加入者");
+    expect(started.players.white?.nickname).toBe("创建者");
+    expect(joiner.role).toBe("black");
+    expect(started.status).toBe("playing");
   });
 
-  it("rejects a third player", () => {
-    const store = createRoomStore();
-    const created = store.createRoom("黑棋");
-    store.joinRoom(created.room.id, "白棋");
-    expect(() => store.joinRoom(created.room.id, "第三人")).toThrow("ROOM_FULL");
+  it("allows at most five spectators", () => {
+    const { store, roomId } = setupGame();
+    for (let index = 0; index < 5; index += 1) {
+      expect(store.joinRoom(roomId, `观众${index}`).role).toBe("spectator");
+    }
+    expect(() => store.joinRoom(roomId, "第六位观众")).toThrow("SPECTATOR_LIMIT_REACHED");
   });
 
-  it("places moves, switches turns, and finishes on five in a row", () => {
-    const store = createRoomStore();
-    const black = store.createRoom("黑棋");
-    const white = store.joinRoom(black.room.id, "白棋");
-    const roomId = black.room.id;
-    const blackToken = black.playerToken;
-    const whiteToken = white.playerToken;
-
-    store.placeStone(roomId, blackToken, { x: 0, y: 0 });
-    store.placeStone(roomId, whiteToken, { x: 0, y: 1 });
-    store.placeStone(roomId, blackToken, { x: 1, y: 0 });
-    store.placeStone(roomId, whiteToken, { x: 1, y: 1 });
-    store.placeStone(roomId, blackToken, { x: 2, y: 0 });
-    store.placeStone(roomId, whiteToken, { x: 2, y: 1 });
-    store.placeStone(roomId, blackToken, { x: 3, y: 0 });
-    store.placeStone(roomId, whiteToken, { x: 3, y: 1 });
-    const finished = store.placeStone(roomId, blackToken, { x: 4, y: 0 });
-
+  it("finishes immediately on five or more in a row", () => {
+    const { store, black, white, roomId } = setupGame();
+    const finished = finishBlackWin(store, roomId, black.playerToken, white.playerToken);
     expect(finished.status).toBe("finished");
     expect(finished.winner).toBe("black");
     expect(finished.winningLine).toHaveLength(5);
-    expect(finished.moveCount).toBe(9);
   });
 
-  it("undoes the last move only after opponent approval", () => {
-    const store = createRoomStore({ now: () => 1234 });
-    const black = store.createRoom("黑棋");
-    const white = store.joinRoom(black.room.id, "白棋");
-    const roomId = black.room.id;
-
+  it("allows either player to request removal of the latest stone", () => {
+    const { store, black, white, roomId } = setupGame({ now: () => 1234 });
     store.placeStone(roomId, black.playerToken, { x: 3, y: 3 });
-    const requested = store.requestUndo(roomId, black.playerToken);
-    expect(requested.undoRequest).toMatchObject({
-      requestedBy: "black",
-      move: { point: { x: 3, y: 3 }, color: "black" },
-      createdAt: 1234
-    });
-    expect(() => store.approveUndo(roomId, black.playerToken)).toThrow(
-      "OPPONENT_APPROVAL_REQUIRED"
-    );
-
-    const undone = store.approveUndo(roomId, white.playerToken);
+    const requested = store.requestUndo(roomId, white.playerToken);
+    expect(requested.undoRequest?.move.point).toEqual({ x: 3, y: 3 });
+    const undone = store.approveUndo(roomId, black.playerToken);
     expect(undone.board[3][3]).toBe(null);
     expect(undone.currentTurn).toBe("black");
-    expect(undone.lastMove).toBe(null);
-    expect(undone.lastMoveColor).toBe(null);
-    expect(undone.moveCount).toBe(0);
-    expect(undone.undoRequest).toBe(null);
   });
 
-  it("rejects undo requests from a player who did not make the last move", () => {
-    const store = createRoomStore();
-    const black = store.createRoom("黑棋");
-    const white = store.joinRoom(black.room.id, "白棋");
-    store.placeStone(black.room.id, black.playerToken, { x: 0, y: 0 });
-
-    expect(() => store.requestUndo(black.room.id, white.playerToken)).toThrow(
-      "ONLY_LAST_MOVER_CAN_REQUEST_UNDO"
-    );
+  it("does not allow undo after the game finishes", () => {
+    const { store, black, white, roomId } = setupGame();
+    finishBlackWin(store, roomId, black.playerToken, white.playerToken);
+    expect(() => store.requestUndo(roomId, black.playerToken)).toThrow("UNDO_NOT_AVAILABLE");
   });
 
-  it("restarts the game after both players agree", () => {
-    const store = createRoomStore();
-    const black = store.createRoom("黑棋");
-    const white = store.joinRoom(black.room.id, "白棋");
-    const roomId = black.room.id;
-
-    store.placeStone(roomId, black.playerToken, { x: 0, y: 0 });
-    const waiting = store.setRestartReady(roomId, black.playerToken);
-    expect(waiting.restartReady.black).toBe(true);
-    expect(waiting.board[0][0]).toBe("black");
-
-    const restarted = store.setRestartReady(roomId, white.playerToken);
+  it("swaps colors after both players approve a rematch", () => {
+    const { store, black, white, roomId } = setupGame();
+    finishBlackWin(store, roomId, black.playerToken, white.playerToken);
+    store.setRestartReady(roomId, black.playerToken);
+    const starting = store.setRestartReady(roomId, white.playerToken);
+    expect(starting.status).toBe("starting");
+    const restarted = store.activateRound(roomId);
+    expect(restarted.gameNumber).toBe(2);
+    expect(restarted.players.black?.nickname).toBe("白棋");
+    expect(restarted.players.white?.nickname).toBe("黑棋");
     expect(restarted.board.flat().every((cell) => cell === null)).toBe(true);
-    expect(restarted.currentTurn).toBe("black");
-    expect(restarted.status).toBe("playing");
-    expect(restarted.moveCount).toBe(0);
-    expect(restarted.restartReady).toEqual({ black: false, white: false });
   });
 
-  it("adds chat messages from a room player", () => {
-    const store = createRoomStore({ now: () => 1234 });
-    const created = store.createRoom("黑棋");
-    const room = store.addChatMessage(created.room.id, created.playerToken, "  你好   好友  ");
-
-    expect(room.chatMessages).toHaveLength(1);
-    expect(room.chatMessages[0]).toMatchObject({
-      nickname: "黑棋",
-      color: "black",
-      text: "你好 好友",
-      createdAt: 1234
-    });
+  it("returns chat messages without storing history in room snapshots", () => {
+    let time = 1000;
+    const { store, black, roomId } = setupGame({ now: () => time, chatCooldownMs: 2000 });
+    const message = store.addChatMessage(roomId, black.playerToken, "  你好   好友  ");
+    expect(message).toMatchObject({ nickname: "黑棋", color: "black", text: "你好 好友" });
+    expect("chatMessages" in store.getRoom(roomId)).toBe(false);
+    expect(() => store.addChatMessage(roomId, black.playerToken, "太快")).toThrow("CHAT_RATE_LIMITED");
+    time += 2000;
+    expect(store.addChatMessage(roomId, black.playerToken, "可以了").text).toBe("可以了");
   });
 
-  it("rejects empty chat messages", () => {
-    const store = createRoomStore();
-    const created = store.createRoom("黑棋");
-
-    expect(() => store.addChatMessage(created.room.id, created.playerToken, "   ")).toThrow(
-      "CHAT_MESSAGE_REQUIRED"
-    );
+  it("keeps player seats during disconnect and restores by token", () => {
+    const { store, black, roomId } = setupGame();
+    const paused = store.markOffline(roomId, black.playerToken);
+    expect(paused.status).toBe("paused");
+    const reconnected = store.reconnect(roomId, black.playerToken);
+    expect(reconnected.room.status).toBe("playing");
+    expect(reconnected.role).toBe("black");
   });
 
-  it("keeps only the latest 50 chat messages", () => {
-    const store = createRoomStore();
-    const created = store.createRoom("黑棋");
-    let room = created.room;
-
-    for (let index = 0; index < 55; index += 1) {
-      room = store.addChatMessage(created.room.id, created.playerToken, `消息 ${index}`);
-    }
-
-    expect(room.chatMessages).toHaveLength(50);
-    expect(room.chatMessages[0].text).toBe("消息 5");
-    expect(room.chatMessages[49].text).toBe("消息 54");
+  it("does not promote spectators and closes after both players explicitly leave", () => {
+    const { store, black, white, roomId } = setupGame();
+    const spectator = store.joinRoom(roomId, "观众");
+    const firstLeave = store.leaveRoom(roomId, black.playerToken);
+    expect(firstLeave.closed).toBe(false);
+    expect(store.reconnect(roomId, spectator.playerToken).role).toBe("spectator");
+    const secondLeave = store.leaveRoom(roomId, white.playerToken);
+    expect(secondLeave.closed).toBe(true);
+    expect(() => store.getRoom(roomId)).toThrow("ROOM_NOT_FOUND");
   });
 
-  it("reconnects a player by token", () => {
-    const store = createRoomStore();
-    const created = store.createRoom("黑棋");
-    store.markOffline(created.room.id, created.playerToken);
-    const reconnected = store.reconnect(created.room.id, created.playerToken);
-    expect(reconnected.players.black?.online).toBe(true);
-  });
-
-  it("deletes inactive rooms after the configured timeout", () => {
+  it("deletes fully inactive rooms after the fallback timeout", () => {
     let currentTime = 1_000;
-    const store = createRoomStore({
-      now: () => currentTime,
-      inactiveRoomMs: 30 * 60 * 1000
-    });
+    const store = createRoomStore({ now: () => currentTime, inactiveRoomMs: 30 * 60 * 1000 });
     const created = store.createRoom("黑棋");
     store.markOffline(created.room.id, created.playerToken);
-
     currentTime += 31 * 60 * 1000;
-    const deleted = store.deleteInactiveRooms();
-
-    expect(deleted).toBe(1);
-    expect(() => store.getRoom(created.room.id)).toThrow("ROOM_NOT_FOUND");
+    expect(store.deleteInactiveRooms()).toBe(1);
   });
 });

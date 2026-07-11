@@ -1,0 +1,57 @@
+digraph PageStates {
+  graph [rankdir=LR, bgcolor="white", pad="0.3", nodesep="0.45", ranksep="0.65", fontname="Noto Sans CJK SC"];
+  node [shape=box, style="rounded,filled", fillcolor="#F6F1E7", color="#6B5A45", fontname="Noto Sans CJK SC", fontsize=11, margin="0.15,0.08"];
+  edge [color="#6B5A45", fontname="Noto Sans CJK SC", fontsize=9];
+
+  Boot [label="启动\nBooting"];
+  Home [label="首页可用\nHomeReady"];
+  Conn [label="连接后端\nConnecting"];
+  Wake [label="后端准备中\nWakingServer"];
+  Join [label="加入/恢复房间\nJoiningRoom"];
+  Room [label="房间已同步\nRoomReady"];
+  Reconn [label="断线重连\nReconnecting"];
+  Missing [label="房间不存在/失效\nRoomNotFound", fillcolor="#F7E5E1"];
+  Closed [label="房间已关闭\nRoomClosed", fillcolor="#F7E5E1"];
+  Cap [label="观众席已满\nCapacityError", fillcolor="#F7E5E1"];
+
+  Boot -> Home [label="初始化完成"];
+  Home -> Conn [label="创建/加入"];
+  Conn -> Wake [label="连接较慢"];
+  Conn -> Join [label="连接成功"];
+  Wake -> Join [label="连接成功"];
+  Join -> Room [label="快照成功"];
+  Join -> Missing [label="ROOM_NOT_FOUND"];
+  Join -> Cap [label="观众已满"];
+  Room -> Reconn [label="Socket 断开"];
+  Reconn -> Room [label="重连+同步"];
+  Reconn -> Missing [label="房间失效"];
+  Room -> Closed [label="room:closed"];
+  Missing -> Home [label="返回首页"];
+  Closed -> Home [label="返回首页"];
+  Cap -> Home [label="返回首页"];
+
+  subgraph cluster_room_ui {
+    label="房间内页面状态";
+    color="#B8A78F";
+    bgcolor="white";
+    style="rounded";
+    fontname="Noto Sans CJK SC";
+    Waiting [label="等待好友"];
+    Starting [label="随机分色/交换颜色"];
+    Playing [label="正常对局"];
+    Paused [label="棋手离线\n暂停"];
+    Undo [label="悔棋待处理"];
+    Finished [label="胜负/和棋"];
+    Rematch [label="等待再战确认"];
+
+    Waiting -> Starting [label="第二棋手加入"];
+    Starting -> Playing [label="到达开始时间"];
+    Playing -> Paused [label="棋手断线/离开"];
+    Paused -> Playing [label="双方在线"];
+    Playing -> Undo [label="申请悔棋"];
+    Undo -> Playing [label="同意/拒绝/取消"];
+    Playing -> Finished [label="五连/满盘"];
+    Finished -> Rematch [label="一方请求"];
+    Rematch -> Starting [label="双方确认"];
+  }
+}

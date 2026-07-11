@@ -1,62 +1,104 @@
 import express from "express";
 import { createServer } from "node:http";
-import { networkInterfaces } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
 import { createRoomStore } from "./roomStore";
 import { registerSocketHandlers } from "./socketHandlers";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const port = parsePort(process.env.PORT);
+const host = process.env.HOST ?? "0.0.0.0";
+const allowedOrigins = parseAllowedOrigins(process.env.FRONTEND_ORIGINS);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  transports: ["websocket", "polling"],
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000,
+    skipMiddlewares: true
+  },
   cors: {
-    origin: "*"
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("ORIGIN_NOT_ALLOWED"));
+    },
+    methods: ["GET", "POST"]
   }
 });
 const roomStore = createRoomStore();
 
+app.disable("x-powered-by");
 registerSocketHandlers(io, roomStore);
 
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   roomStore.deleteInactiveRooms();
-}, 5 * 60 * 1000).unref();
+}, 5 * 60 * 1000);
+cleanupTimer.unref();
 
-app.get("/health", (_request, response) => {
-  response.json({ ok: true });
+app.get(["/health", "/api/health"], (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  response.status(200).json({ ok: true, service: "qizheyiy-gomoku-api" });
 });
 
-function getLanOrigins(port: number) {
-  return Object.values(networkInterfaces())
-    .flatMap((interfaces) => interfaces ?? [])
-    .filter((details) => details.family === "IPv4" && !details.internal)
-    .map((details) => `http://${details.address}:${port}`);
-}
-
-app.get("/api/share-info", (request, response) => {
-  const protocol = request.headers["x-forwarded-proto"] ?? request.protocol;
-  const host = request.headers["x-forwarded-host"] ?? request.headers.host;
-  const currentOrigin = host ? `${protocol}://${host}` : null;
-  response.json({
-    currentOrigin,
-    lanOrigins: getLanOrigins(port)
+app.get("/", (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  response.status(200).json({
+    name: "棋者弈也",
+    service: "realtime-api",
+    ok: true
   });
 });
 
-const distPath = path.resolve(__dirname, "../dist");
-app.use(express.static(distPath));
-app.get("*", (_request, response) => {
-  response.sendFile(path.join(distPath, "index.html"));
+httpServer.requestTimeout = 30_000;
+httpServer.headersTimeout = 35_000;
+
+httpServer.on("error", (error) => {
+  console.error("server error", error);
+  process.exitCode = 1;
 });
 
-const port = Number(process.env.PORT ?? 8788);
-const host = process.env.HOST ?? "0.0.0.0";
 httpServer.listen(port, host, () => {
-  const lanOrigins = getLanOrigins(port);
-  console.log(`online gomoku server listening on http://127.0.0.1:${port}`);
-  for (const origin of lanOrigins) {
-    console.log(`LAN share URL: ${origin}`);
-  }
+  console.log(`棋者弈也 API listening on http://${host}:${port}`);
+  console.log(`allowed frontend origins: ${[...allowedOrigins].join(", ")}`);
 });
+
+let shuttingDown = false;
+function shutdown(signal: string) {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  console.log(`${signal} received, closing connections`);
+  clearInterval(cleanupTimer);
+  io.emit("server:shutdown", { reason: "deployment" });
+  io.close(() => {
+    httpServer.close(() => {
+      process.exit(0);
+    });
+  });
+  setTimeout(() => process.exit(1), 8_000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
+function parsePort(rawPort: string | undefined): number {
+  const parsed = Number(rawPort ?? 8788);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
+    throw new Error("PORT must be an integer between 1 and 65535");
+  }
+  return parsed;
+}
+
+function parseAllowedOrigins(rawOrigins: string | undefined): Set<string> {
+  const defaults = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ];
+  const configured = (rawOrigins ?? "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return new Set([...defaults, ...configured]);
+}

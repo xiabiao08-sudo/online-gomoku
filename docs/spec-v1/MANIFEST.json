@@ -1,0 +1,72 @@
+[
+  {
+    "file": ".env.backend.example",
+    "size": 105,
+    "sha256": "a68591c073187b97658905aeb05824497a49517df7469002d02b0a69e40df1b5"
+  },
+  {
+    "file": ".env.frontend.example",
+    "size": 112,
+    "sha256": "a04495513138e23e3f64b30d9193b19307bf05098b81252b687a1b5085fd4ebe"
+  },
+  {
+    "file": "01-正式产品规格.md",
+    "size": 12761,
+    "sha256": "8cf40a0e0070eafc6032ea932622eabf9a918d1367d16de0a883d708ce804a22"
+  },
+  {
+    "file": "02-页面状态图.md",
+    "size": 6718,
+    "sha256": "3d86dbaf47ed5bd5b8c503fd1c57fe6873bed4fef846ab6201a89e979d2d9122"
+  },
+  {
+    "file": "03-服务端房间状态机.md",
+    "size": 9919,
+    "sha256": "28be35668b27e2695fc5e0127994c30eae176be1784f032477280aaf49b83e01"
+  },
+  {
+    "file": "04-前后端拆分部署配置.md",
+    "size": 7628,
+    "sha256": "a80a5bd267326d1f4a36f58ff34b53dd8cc1cb994e62f198b314d8111c112b9c"
+  },
+  {
+    "file": "PAGE_STATE_MAP.dot",
+    "size": 2378,
+    "sha256": "b0364db04d85836eecb4d3700147452b24b55dbed45fce0761bfbfa8d326f3d4"
+  },
+  {
+    "file": "README.md",
+    "size": 1756,
+    "sha256": "fe1a0ab977618e88baf0c382b7093dfc2d5408b1a82f6eaccf776bf39901526a"
+  },
+  {
+    "file": "ROOM_STATE_MACHINE.dot",
+    "size": 2099,
+    "sha256": "506aa7d9a0fceb67b2f19c17a26c35cf2ad1811edba74a1e7692dfc6805c2aad"
+  },
+  {
+    "file": "page-state-map.png",
+    "size": 193736,
+    "sha256": "ae8ee54a586a415c589a95f43c1cf9dd69bc20e9e31bc596a166da3279787031"
+  },
+  {
+    "file": "page-state-map.svg",
+    "size": 21284,
+    "sha256": "f4c0ab41256830dcb3ce3261e05fdc38409fea987ed1df28f580ad5ed764e34a"
+  },
+  {
+    "file": "render.split.yaml",
+    "size": 1241,
+    "sha256": "6c191b3423de6649fe8f8e311fa2c7362bdb59c41cd2fcacd804915f4f9a498b"
+  },
+  {
+    "file": "room-state-machine.png",
+    "size": 217397,
+    "sha256": "19dcbc4621d7f265ce1da02546a6a0f63342d3da44f3edf8d97f098ef096605c"
+  },
+  {
+    "file": "room-state-machine.svg",
+    "size": 14719,
+    "sha256": "c6c71ff81bb3d07dbbb17127104b93f3e91612fe39187212ed149b71dbce402f"
+  }
+]

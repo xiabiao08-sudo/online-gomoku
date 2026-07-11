@@ -1,92 +1,107 @@
-# 公网部署说明
+# Render 前后端拆分部署
 
-这个项目是 React + Express + Socket.IO 的单体 Node Web 服务。公网演示版必须部署成支持 WebSocket 的 Node 服务，不能只部署成纯静态站点，否则实时联机会失效。
-
-## 当前固定演示地址
-
-Render Web Service：
+## 架构
 
 ```text
-https://online-gomoku-wjzw.onrender.com
+Render Static Site
+qizheyiy-gomoku-web
+  └─ React / Vite / SPA
+
+Render Free Web Service
+qizheyiy-gomoku-api
+  └─ Express / Socket.IO / 内存房间
 ```
 
-健康检查：
+前端独立由 CDN 提供，因此后端休眠时页面仍能打开，并显示“正在连接游戏服务器”。
 
-```text
-https://online-gomoku-wjzw.onrender.com/health
+## 推荐：Blueprint 部署
+
+1. 将项目提交到 GitHub 仓库根目录。
+2. 在 Render 选择 **New → Blueprint**。
+3. 选择该 GitHub 仓库。
+4. Render 读取根目录的 `render.yaml`。
+5. 确认创建以下服务：
+   - `qizheyiy-gomoku-web`
+   - `qizheyiy-gomoku-api`
+6. 完成首次部署后检查：
+   - 前端首页可以打开
+   - 后端 `/health` 返回 HTTP 200
+   - 前端连接状态变为“游戏服务器已连接”
+
+## Blueprint 核心配置
+
+```yaml
+services:
+  - type: web
+    name: qizheyiy-gomoku-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run typecheck && npm run test
+    startCommand: npm start
+    healthCheckPath: /health
+    numInstances: 1
+
+  - type: web
+    name: qizheyiy-gomoku-web
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
 ```
 
-Render Dashboard：
+Blueprint 会把后端的 `RENDER_EXTERNAL_URL` 注入前端的 `VITE_SOCKET_URL`，并把前端 URL 注入后端的 `FRONTEND_ORIGINS`。
 
-```text
-https://dashboard.render.com/web/srv-d9673u77f7vs73d271bg
+## 手动部署时的环境变量
+
+### 前端
+
+```env
+VITE_SOCKET_URL=https://你的后端服务.onrender.com
 ```
 
-## 为什么临时链接会打不开
+### 后端
 
-`trycloudflare.com` Quick Tunnel 是临时隧道，适合快速演示：
-
-- 电脑关机、网络变化、隧道进程退出后，链接会失效。
-- 每次重启隧道通常会得到新的链接。
-- 它不能作为长期固定网址。
-
-想让朋友稳定打开，有两类方案：
-
-- 正式部署到支持 Node + WebSocket 的平台，例如 Render、Railway、Fly.io 或 VPS。
-- 使用 Cloudflare Named Tunnel + 自有域名，把固定域名指向本机或服务器。
-
-## 推荐方案 A：Node Web Service
-
-适合长期给朋友分享一个公网 HTTPS 链接。
-
-项目已提供两个可复用配置文件：
-
-- `render.yaml`：Render Blueprint / Web Service 配置参考。
-- `railway.json`：Railway Nixpacks 构建与启动配置参考。
-
-Render / Railway / Fly.io / VPS 的核心配置类似：
-
-- Root Directory：`projects/【codex test】/在线联机五子棋`
-- Environment：`Node`
-- Build Command：`npm ci && npm run build`
-- Start Command：`npm start`
-- Health Check Path：`/health`
-- Instance Count：`1`
-
-一般不需要手动设置 `PORT`，部署平台会自动注入。可选环境变量：
-
-```text
+```env
 HOST=0.0.0.0
+NODE_ENV=production
+FRONTEND_ORIGINS=https://你的前端服务.onrender.com
 ```
 
-部署完成后检查：
+多个允许来源用英文逗号分隔。
+
+## 健康检查
 
 ```text
-https://<你的公网域名>/health
+GET /health
+GET /api/health
 ```
 
-应返回：
+正常响应示例：
 
 ```json
-{"ok":true}
+{"ok":true,"service":"qizheyiy-gomoku-api"}
 ```
 
-然后用两台不同网络的设备打开同一个房间链接，确认双方能加入、落子、聊天。
+## SPA 路由
 
-## 推荐方案 B：Cloudflare Named Tunnel
+静态站点必须保留以下 Rewrite：
 
-适合你已经有自有域名，且希望把固定域名转发到本机或某台服务器。
+```text
+/* → /index.html
+```
 
-关键点：
+否则直接打开或刷新 `/room/ABC123` 会返回 404。
 
-- 使用 Named Tunnel，不使用 Quick Tunnel。
-- 域名 DNS 由 Cloudflare 托管。
-- 隧道服务要常驻运行。
-- 转发目标指向本服务，例如 `http://127.0.0.1:8788`。
+## 发布后验证
 
-## 重要限制
-
-- MVP 房间状态存在服务端内存里，服务重启会丢房间。
-- 当前版本应部署单实例，多实例需要 Socket.IO Redis Adapter 和共享房间状态。
-- 平台休眠后第一次打开可能较慢，已创建的内存房间也可能丢失。
-- 纯静态托管不适合这个项目，必须支持 Node 服务和 WebSocket。
+1. 用浏览器 A 创建棋局。
+2. 用浏览器 B 加入，确认首局黑白为随机分配。
+3. 用第三个浏览器加入，确认进入观众席。
+4. 连续加入到 5 名观众，再加入第 6 名，确认显示观众席已满。
+5. 测试手机端候选落子、确认开关、双指缩放和拖动。
+6. 完成一局，确认获胜印章、获胜连线和再来一局换色。
+7. 刷新观众页面，确认旧聊天不会补发。
+8. 两名棋手依次点击离开，确认房间关闭。
