@@ -4,6 +4,10 @@
 
 一个面向朋友之间快速开局的 19×19 在线五子棋。无需注册：创建棋局、分享链接、两名棋手对弈，后来者进入观众席。
 
+**在线试玩：** [https://online-gomoku-wjzw.onrender.com/](https://online-gomoku-wjzw.onrender.com/)
+
+**服务状态：** [健康检查](https://online-gomoku-wjzw.onrender.com/health)
+
 ## V1 功能
 
 - 19×19 自由五子棋，无禁手
@@ -18,7 +22,7 @@
 - 悔棋只撤回最新一颗，需要对方同意；胜负后不能悔棋
 - 棋手断线后暂停，等待原棋手恢复；观众不会补位
 - 两名棋手都明确离开后立即关闭房间
-- 前端静态站点与 Socket.IO 后端拆分部署
+- Render 单服务部署：网页与 Socket.IO 实时服务使用同一公网地址
 
 ## 本地开发
 
