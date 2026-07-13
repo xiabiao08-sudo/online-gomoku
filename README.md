@@ -87,4 +87,6 @@ npm run check
 
 完整规格位于 [`docs/spec-v1`](./docs/spec-v1/README.md)。
 
+手机棋盘的布局、触控与迁移规范位于 [`docs/standards/MOBILE_INTERACTION_MIGRATION.md`](./docs/standards/MOBILE_INTERACTION_MIGRATION.md)。
+
 效果图位于 [`docs/previews`](./docs/previews)。
