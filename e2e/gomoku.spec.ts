@@ -10,7 +10,7 @@ async function createJoinedRoom(browser: Browser) {
   await expect(creatorPage.getByText("游戏服务器已连接")).toBeVisible({ timeout: 30_000 });
   await creatorPage.getByLabel("你的昵称").fill("创建者");
   await creatorPage.getByRole("button", { name: "创建棋局" }).click();
-  await expect(creatorPage.getByText("房间号")).toBeVisible();
+  await expect(creatorPage.getByRole("button", { name: "离开棋局" })).toBeVisible();
 
   const roomUrl = creatorPage.url();
   await joinerPage.goto(roomUrl);
@@ -93,4 +93,38 @@ test("a finished game supports rematch with swapped colors", async ({ browser })
 
   await room.creatorContext.close();
   await room.joinerContext.close();
+});
+
+test("mobile game view keeps the board above the fixed controls and allows page scrolling before zoom", async ({ browser }) => {
+  const mobileContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true
+  });
+  const joinerContext = await browser.newContext();
+  const mobilePage = await mobileContext.newPage();
+  const joinerPage = await joinerContext.newPage();
+
+  await mobilePage.goto("/");
+  await expect(mobilePage.getByText("游戏服务器已连接")).toBeVisible({ timeout: 30_000 });
+  await mobilePage.getByLabel("你的昵称").fill("手机创建者");
+  await mobilePage.getByRole("button", { name: "创建棋局" }).click();
+  const roomUrl = mobilePage.url();
+
+  await joinerPage.goto(roomUrl);
+  await expect(joinerPage.getByText("游戏服务器已连接")).toBeVisible({ timeout: 30_000 });
+  await joinerPage.getByLabel("昵称").fill("桌面加入者");
+  await joinerPage.getByRole("button", { name: "加入棋局" }).click();
+  await expect(mobilePage.getByText(/你执(黑|白)/)).toBeVisible({ timeout: 10_000 });
+  await expect(mobilePage.locator("p.status-text").filter({ hasText: "正在随机分配黑白" })).toBeHidden({ timeout: 10_000 });
+
+  const viewport = mobilePage.locator(".board-viewport");
+  await expect(viewport).toHaveAttribute("data-zoomed", "false");
+  await expect(viewport).toHaveCSS("touch-action", "pan-y");
+  const boardBox = await viewport.boundingBox();
+  expect(boardBox).not.toBeNull();
+  expect(boardBox!.y + boardBox!.height).toBeLessThanOrEqual(770);
+
+  await mobileContext.close();
+  await joinerContext.close();
 });
